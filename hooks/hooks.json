@@ -1,0 +1,17 @@
+{
+  "description": "Forward completed Codex turns to the configured webhook.",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$PLUGIN_ROOT/scripts/webhook_notify.py\"",
+            "timeout": 20,
+            "statusMessage": "Sending task notification"
+          }
+        ]
+      }
+    ]
+  }
+}

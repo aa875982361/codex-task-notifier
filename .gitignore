@@ -1,0 +1,15 @@
+# Local configuration and credentials
+.env
+.env.*
+*.secret
+*.token
+*.key
+*.pem
+*.p12
+*.pfx
+codex-task-notifier.url
+
+# Python and OS artifacts
+__pycache__/
+*.py[cod]
+.DS_Store

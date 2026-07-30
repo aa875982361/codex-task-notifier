@@ -1,0 +1,17 @@
+{
+  "name": "codex-task-notifier",
+  "version": "0.1.0",
+  "description": "Send completed Codex task results to one webhook URL.",
+  "author": {
+    "name": "Codex Hook"
+  },
+  "interface": {
+    "displayName": "Codex Task Notifier",
+    "shortDescription": "Forward completed tasks to your notification server.",
+    "longDescription": "Posts Codex Stop lifecycle events and the final assistant result to one configured webhook URL. Your server owns email, chat, and other downstream delivery.",
+    "developerName": "Codex Hook",
+    "category": "Productivity",
+    "capabilities": ["Task completion webhook"],
+    "defaultPrompt": "Configure or test my Codex task notification webhook."
+  }
+}
