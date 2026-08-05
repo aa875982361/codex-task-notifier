@@ -107,7 +107,11 @@ class WebhookNotifyTests(unittest.TestCase):
         windows_command = handler["commandWindows"]
 
         self.assertIn("powershell.exe", windows_command)
-        self.assertIn("webhook_notify.ps1", windows_command)
+        self.assertIn(
+            '-File "%PLUGIN_ROOT%\\scripts\\webhook_notify.ps1"',
+            windows_command,
+        )
+        self.assertNotIn("$env:PLUGIN_ROOT", windows_command)
         self.assertNotIn("python", windows_command.lower())
         self.assertTrue((plugin_root / "scripts" / "webhook_notify.ps1").is_file())
 

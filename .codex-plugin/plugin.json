@@ -1,6 +1,6 @@
 {
   "name": "codex-task-notifier",
-  "version": "0.1.0+codex.20260805101135",
+  "version": "0.1.0+codex.20260805125618",
   "description": "Send completed Codex task results to one webhook URL.",
   "author": {
     "name": "Codex Hook"
