@@ -123,12 +123,16 @@ class WebhookNotifyTests(unittest.TestCase):
             "stop_hook_active",
             '"X-Codex-Event" = "codex.task.completed"',
             '"X-Codex-Payload" = "hook-input"',
+            "[Console]::OpenStandardInput()",
+            "New-Object Text.UTF8Encoding($false, $true)",
             "GetBytes($inputText)",
             "[Net.SecurityProtocolType]::Tls12",
             'Write-HookResult',
             'Write-DeliveryLog "sent"',
         ):
             self.assertIn(required_contract, powershell)
+
+        self.assertNotIn("[Console]::In.ReadToEnd()", powershell)
 
     def test_reads_single_url_file(self):
         with TemporaryDirectory() as directory:
