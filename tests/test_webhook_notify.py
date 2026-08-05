@@ -1,5 +1,6 @@
 import json
 import os
+import subprocess
 import sys
 import threading
 import unittest
@@ -16,6 +17,115 @@ import webhook_notify
 
 
 class WebhookNotifyTests(unittest.TestCase):
+    def test_posix_hook_has_no_language_runtime_dependency(self):
+        plugin_root = Path(__file__).resolve().parents[1]
+        hooks = json.loads(
+            (plugin_root / "hooks" / "hooks.json").read_text(encoding="utf-8")
+        )
+        command = hooks["hooks"]["Stop"][0]["hooks"][0]["command"]
+
+        self.assertEqual(command, 'sh "$PLUGIN_ROOT/scripts/webhook_notify.sh"')
+        self.assertNotIn("python", command.lower())
+        self.assertNotIn("node", command.lower())
+        self.assertNotIn("jq", command.lower())
+
+    def test_posix_hook_forwards_original_json_with_curl(self):
+        received = {}
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                length = int(self.headers["Content-Length"])
+                received["headers"] = self.headers
+                received["payload"] = json.loads(self.rfile.read(length))
+                self.send_response(204)
+                self.end_headers()
+
+            def log_message(self, format, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.handle_request)
+        thread.start()
+        event = {
+            "hook_event_name": "Stop",
+            "stop_hook_active": False,
+            "session_id": "session-shell",
+            "turn_id": "turn-shell",
+            "cwd": "/workspace/demo",
+            "last_assistant_message": '完成，包含"引号"和\n换行。',
+        }
+        plugin_root = Path(__file__).resolve().parents[1]
+        try:
+            with TemporaryDirectory() as directory:
+                environment = {
+                    **os.environ,
+                    "PLUGIN_DATA": directory,
+                    "CODEX_NOTIFY_WEBHOOK_URL": (
+                        f"http://127.0.0.1:{server.server_port}/notify"
+                    ),
+                }
+                result = subprocess.run(
+                    ["sh", str(plugin_root / "scripts" / "webhook_notify.sh")],
+                    input=json.dumps(event, ensure_ascii=False),
+                    text=True,
+                    capture_output=True,
+                    env=environment,
+                    check=True,
+                )
+        finally:
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(json.loads(result.stdout), {"continue": True})
+        self.assertEqual(received["payload"], event)
+        self.assertEqual(received["headers"]["X-Codex-Payload"], "hook-input")
+
+    def test_posix_hook_fails_open_when_curl_is_missing(self):
+        plugin_root = Path(__file__).resolve().parents[1]
+        environment = {
+            "PATH": "",
+            "CODEX_NOTIFY_WEBHOOK_URL": "https://notify.example.test/hook/token",
+        }
+        result = subprocess.run(
+            ["/bin/sh", str(plugin_root / "scripts" / "webhook_notify.sh")],
+            input='{"hook_event_name":"Stop"}',
+            text=True,
+            capture_output=True,
+            env=environment,
+            check=True,
+        )
+
+        self.assertEqual(json.loads(result.stdout), {"continue": True})
+        self.assertIn("curl is not available", result.stderr)
+
+    def test_windows_hook_has_no_python_runtime_dependency(self):
+        plugin_root = Path(__file__).resolve().parents[1]
+        hooks = json.loads(
+            (plugin_root / "hooks" / "hooks.json").read_text(encoding="utf-8")
+        )
+        handler = hooks["hooks"]["Stop"][0]["hooks"][0]
+        windows_command = handler["commandWindows"]
+
+        self.assertIn("powershell.exe", windows_command)
+        self.assertIn("webhook_notify.ps1", windows_command)
+        self.assertNotIn("python", windows_command.lower())
+        self.assertTrue((plugin_root / "scripts" / "webhook_notify.ps1").is_file())
+
+        powershell = (plugin_root / "scripts" / "webhook_notify.ps1").read_text(
+            encoding="utf-8"
+        )
+        for required_contract in (
+            'hook_event_name -ne "Stop"',
+            "stop_hook_active",
+            '"X-Codex-Event" = "codex.task.completed"',
+            '"X-Codex-Payload" = "hook-input"',
+            "GetBytes($inputText)",
+            "[Net.SecurityProtocolType]::Tls12",
+            'Write-HookResult',
+            'Write-DeliveryLog "sent"',
+        ):
+            self.assertIn(required_contract, powershell)
+
     def test_reads_single_url_file(self):
         with TemporaryDirectory() as directory:
             path = Path(directory) / "webhook.url"
