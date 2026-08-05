@@ -7,6 +7,29 @@ function Write-HookResult {
     [Console]::Out.WriteLine('{"continue":true}')
 }
 
+function Read-Utf8StandardInput {
+    # Console.In uses the active Windows console code page in Windows PowerShell
+    # 5.1. Codex writes UTF-8 JSON bytes, so decoding through Console.In can turn
+    # Chinese and other non-ASCII task results into mojibake before transmission.
+    $stream = [Console]::OpenStandardInput()
+    $memory = New-Object IO.MemoryStream
+    try {
+        $buffer = New-Object byte[] 8192
+        while (($count = $stream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+            $memory.Write($buffer, 0, $count)
+        }
+        $utf8 = New-Object Text.UTF8Encoding($false, $true)
+        $text = $utf8.GetString($memory.ToArray())
+        if ($text.Length -gt 0 -and $text[0] -eq [char] 0xFEFF) {
+            return $text.Substring(1)
+        }
+        return $text
+    }
+    finally {
+        $memory.Dispose()
+    }
+}
+
 function Test-WebhookUrl([string] $Value) {
     $uri = $null
     if (-not [Uri]::TryCreate($Value, [UriKind]::Absolute, [ref] $uri)) {
@@ -35,7 +58,7 @@ function Get-ConfiguredUrl {
 
     foreach ($path in $candidates) {
         if (Test-Path -LiteralPath $path -PathType Leaf) {
-            $value = (Get-Content -LiteralPath $path -Raw).Trim()
+            $value = (Get-Content -LiteralPath $path -Raw -Encoding UTF8).Trim()
             if (-not [string]::IsNullOrWhiteSpace($value)) {
                 return Test-WebhookUrl $value
             }
@@ -66,7 +89,7 @@ function Write-DeliveryLog([string] $Status, $Event, [string] $Detail = "") {
 }
 
 try {
-    $inputText = [Console]::In.ReadToEnd()
+    $inputText = Read-Utf8StandardInput
     $eventData = $inputText | ConvertFrom-Json
     if ($eventData.hook_event_name -ne "Stop" -or [bool] $eventData.stop_hook_active) {
         return
