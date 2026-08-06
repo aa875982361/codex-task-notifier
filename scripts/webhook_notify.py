@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping
@@ -56,6 +57,20 @@ def validate_url(value: str) -> str:
     return value
 
 
+def is_privacy_url(value: str) -> bool:
+    return urlparse(value).path.rstrip("/").endswith("/private")
+
+
+def make_privacy_payload() -> dict[str, Any]:
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "event": "codex.task.completed",
+        "privacy_mode": True,
+        "delivery_id": uuid.uuid4().hex,
+        "occurred_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+    }
+
+
 def make_payload(event: Mapping[str, Any]) -> dict[str, Any]:
     cwd = str(event.get("cwd") or "")
     return {
@@ -84,6 +99,9 @@ def post_json(url: str, payload: Mapping[str, Any], timeout: float = 7) -> int:
             "Accept": "application/json",
             "User-Agent": f"{PLUGIN_NAME}/0.1.0",
             "X-Codex-Event": "codex.task.completed",
+            "X-Codex-Payload": (
+                "privacy-minimal" if payload.get("privacy_mode") is True else "normalized"
+            ),
         },
     )
     with urlopen(request, timeout=timeout) as response:
@@ -126,7 +144,7 @@ def main() -> int:
             log_delivery("skipped", event, "webhook URL is not configured")
             return 0
 
-        payload = make_payload(event)
+        payload = make_privacy_payload() if is_privacy_url(url) else make_payload(event)
         timeout = float(os.environ.get("CODEX_NOTIFY_TIMEOUT", "7"))
         attempts = max(1, min(3, int(os.environ.get("CODEX_NOTIFY_ATTEMPTS", "2"))))
         last_error: Exception | None = None

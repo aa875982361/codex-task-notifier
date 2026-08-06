@@ -101,6 +101,25 @@ try {
         return
     }
 
+    $webhookUri = [Uri] $url
+    $privacyMode = $webhookUri.AbsolutePath.TrimEnd('/').EndsWith('/private', [StringComparison]::OrdinalIgnoreCase)
+    if ($privacyMode -and [bool] $eventData.stop_hook_active) {
+        return
+    }
+
+    $payloadText = $inputText
+    $payloadType = "hook-input"
+    if ($privacyMode) {
+        $payloadText = ([ordered]@{
+            schema_version = "1"
+            event = "codex.task.completed"
+            privacy_mode = $true
+            delivery_id = [Guid]::NewGuid().ToString("N")
+            occurred_at = [DateTimeOffset]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+        } | ConvertTo-Json -Compress)
+        $payloadType = "privacy-minimal"
+    }
+
     if ($url.StartsWith("https://", [StringComparison]::OrdinalIgnoreCase)) {
         # Windows PowerShell 5.1 can otherwise inherit an obsolete TLS default.
         [Net.ServicePointManager]::SecurityProtocol = `
@@ -124,9 +143,9 @@ try {
             $response = Invoke-WebRequest `
                 -Uri $url `
                 -Method Post `
-                -Body ([Text.Encoding]::UTF8.GetBytes($inputText)) `
+                -Body ([Text.Encoding]::UTF8.GetBytes($payloadText)) `
                 -ContentType "application/json; charset=utf-8" `
-                -Headers @{ Accept = "application/json"; "X-Codex-Event" = "codex.task.completed"; "X-Codex-Payload" = "hook-input" } `
+                -Headers @{ Accept = "application/json"; "X-Codex-Event" = "codex.task.completed"; "X-Codex-Payload" = $payloadType } `
                 -UserAgent "$pluginName/0.1.0" `
                 -TimeoutSec $timeout `
                 -UseBasicParsing

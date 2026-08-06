@@ -1,14 +1,14 @@
 {
   "name": "codex-task-notifier",
-  "version": "0.1.0+codex.20260805125618",
-  "description": "Send completed Codex task results to one webhook URL.",
+  "version": "0.1.0+codex.20260805161000",
+  "description": "Send completed Codex task notifications with an optional privacy mode.",
   "author": {
     "name": "Codex Hook"
   },
   "interface": {
     "displayName": "Codex Task Notifier",
-    "shortDescription": "Forward completed tasks to your notification server.",
-    "longDescription": "Posts Codex Stop lifecycle events and the final assistant result to one configured webhook URL. Your server owns email, chat, and other downstream delivery.",
+    "shortDescription": "Forward task completions with optional local redaction.",
+    "longDescription": "Posts Codex Stop lifecycle events to one configured webhook URL. Privacy-mode URLs discard task content locally and send only a minimal completion event.",
     "developerName": "Codex Hook",
     "category": "Productivity",
     "capabilities": [

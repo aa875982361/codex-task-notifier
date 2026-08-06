@@ -63,6 +63,11 @@ case "$configured_url" in
         ;;
 esac
 
+privacy_mode=false
+case "$configured_url" in
+    */private|*/private\?*) privacy_mode=true ;;
+esac
+
 if ! command -v curl >/dev/null 2>&1; then
     log_delivery 'failed' 'curl is not available'
     printf '%s\n' 'Codex task notification failed: curl is not available' >&2
@@ -78,6 +83,23 @@ chmod 600 "$event_file" 2>/dev/null || true
 if ! cat > "$event_file"; then
     log_delivery 'failed' 'could not read hook input'
     exit 0
+fi
+
+payload_type='hook-input'
+if [ "$privacy_mode" = true ]; then
+    # Ignore recursive Stop events without parsing or transmitting the original JSON.
+    # The key matcher cannot match an escaped copy inside last_assistant_message.
+    if grep -Eq '(^|[,{[:space:]])"stop_hook_active"[[:space:]]*:[[:space:]]*true' "$event_file"; then
+        exit 0
+    fi
+    occurred_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || printf '1970-01-01T00:00:00Z')
+    delivery_id="$(date -u '+%s' 2>/dev/null || printf '0')-$$-${event_file##*.}"
+    if ! printf '{"schema_version":"1","event":"codex.task.completed","privacy_mode":true,"delivery_id":"%s","occurred_at":"%s"}\n' \
+        "$delivery_id" "$occurred_at" > "$event_file"; then
+        log_delivery 'failed' 'could not create privacy payload'
+        exit 0
+    fi
+    payload_type='privacy-minimal'
 fi
 
 timeout=${CODEX_NOTIFY_TIMEOUT:-7}
@@ -104,7 +126,7 @@ while [ "$attempt" -le "$attempts" ]; do
         --header 'Content-Type: application/json; charset=utf-8' \
         --header 'Accept: application/json' \
         --header 'X-Codex-Event: codex.task.completed' \
-        --header 'X-Codex-Payload: hook-input' \
+        --header "X-Codex-Payload: $payload_type" \
         --user-agent "$plugin_name/0.1.0" \
         --data-binary "@$event_file" \
         "$configured_url" 2>/dev/null)
