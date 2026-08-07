@@ -1,6 +1,6 @@
 # Codex Task Notifier
 
-Codex 生命周期通知插件。每个主任务回合结束时，插件监听 `Stop` 事件，将最终结果以 JSON POST 到一个 Webhook URL。邮件等下游通知由服务器统一分发。
+Codex 生命周期通知插件。每个主任务回合结束时，插件监听 `Stop` 事件；用户在同一会话继续输入时，插件监听 `UserPromptSubmit` 事件并取消尚未发送的旧提醒。邮件等下游通知由服务器统一分发。
 
 ## 配置
 
@@ -35,7 +35,7 @@ Linux 若未包含 `curl`，需要由系统包管理器安装。
 生成 Hook 配置时可以选择两种模式：
 
 - 普通模式（默认）：Webhook 地址以 Token 结尾，上传 Codex 提供的 Stop Hook JSON，服务端可以展示任务结果。
-- 隐私模式：Webhook 地址以 `/private` 结尾。插件在本机丢弃原始 Hook 内容，只上传匿名投递 ID、完成时间和隐私标记。
+- 隐私模式：Webhook 地址以 `/private` 结尾。插件在本机丢弃任务内容，只上传会话 ID、匿名投递 ID、完成时间和隐私标记。会话 ID 仅用于取消同一会话的待发送提醒。
 
 模式写入 Webhook 地址，因此切换模式后必须重新生成配置并应用到 Codex。旧 Token 会立即失效；此前已经上传的任务不受影响。
 
@@ -73,6 +73,7 @@ Linux 若未包含 `curl`，需要由系统包管理器安装。
   "schema_version": "1",
   "event": "codex.task.completed",
   "privacy_mode": true,
+  "session_id": "session-id",
   "delivery_id": "opaque-local-id",
   "occurred_at": "2026-08-06T00:00:00Z"
 }
@@ -86,8 +87,18 @@ Linux 若未包含 `curl`，需要由系统包管理器安装。
 `last_assistant_message`，不读取或发送完整会话转录。若 URL 包含 token，请勿提交
 `~/.codex/codex-task-notifier.url`。
 
-隐私模式不会发送 `last_assistant_message`、项目、工作目录、模型、会话 ID 或回合 ID。
+隐私模式不会发送 `last_assistant_message`、用户输入、项目、工作目录、模型或回合 ID，但会发送会话 ID，用于在用户继续该会话时取消待发送提醒。
 服务端会将最小载荷显示为通用的“隐私任务已完成”，无法从该记录还原任务内容。
+
+`UserPromptSubmit` 在两种模式下都只发送最小活动载荷，不会发送 `prompt`：
+
+```json
+{
+  "schema_version": "1",
+  "event": "codex.session.active",
+  "session_id": "session-id"
+}
+```
 
 ## 验证
 

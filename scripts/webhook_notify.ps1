@@ -91,7 +91,11 @@ function Write-DeliveryLog([string] $Status, $Event, [string] $Detail = "") {
 try {
     $inputText = Read-Utf8StandardInput
     $eventData = $inputText | ConvertFrom-Json
-    if ($eventData.hook_event_name -ne "Stop" -or [bool] $eventData.stop_hook_active) {
+    $eventName = [string] $eventData.hook_event_name
+    if ($eventName -notin @("Stop", "UserPromptSubmit")) {
+        return
+    }
+    if ($eventName -eq "Stop" -and [bool] $eventData.stop_hook_active) {
         return
     }
 
@@ -109,11 +113,26 @@ try {
 
     $payloadText = $inputText
     $payloadType = "hook-input"
-    if ($privacyMode) {
+    $eventHeader = "codex.task.completed"
+    if ($eventName -eq "UserPromptSubmit") {
+        if ([string]::IsNullOrWhiteSpace([string] $eventData.session_id)) {
+            Write-DeliveryLog "skipped" $eventData "UserPromptSubmit did not include a session ID"
+            return
+        }
+        $payloadText = ([ordered]@{
+            schema_version = "1"
+            event = "codex.session.active"
+            session_id = [string] $eventData.session_id
+        } | ConvertTo-Json -Compress)
+        $payloadType = "activity-minimal"
+        $eventHeader = "codex.session.active"
+    }
+    elseif ($privacyMode) {
         $payloadText = ([ordered]@{
             schema_version = "1"
             event = "codex.task.completed"
             privacy_mode = $true
+            session_id = [string] $eventData.session_id
             delivery_id = [Guid]::NewGuid().ToString("N")
             occurred_at = [DateTimeOffset]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
         } | ConvertTo-Json -Compress)
@@ -126,12 +145,12 @@ try {
             [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
     }
 
-    $timeout = 7
+    $timeout = if ($eventName -eq "UserPromptSubmit") { 2 } else { 7 }
     $parsedTimeout = 0
     if ([int]::TryParse($env:CODEX_NOTIFY_TIMEOUT, [ref] $parsedTimeout) -and $parsedTimeout -gt 0) {
         $timeout = $parsedTimeout
     }
-    $attempts = 2
+    $attempts = if ($eventName -eq "UserPromptSubmit") { 1 } else { 2 }
     $parsedAttempts = 0
     if ([int]::TryParse($env:CODEX_NOTIFY_ATTEMPTS, [ref] $parsedAttempts)) {
         $attempts = [Math]::Max(1, [Math]::Min(3, $parsedAttempts))
@@ -145,7 +164,7 @@ try {
                 -Method Post `
                 -Body ([Text.Encoding]::UTF8.GetBytes($payloadText)) `
                 -ContentType "application/json; charset=utf-8" `
-                -Headers @{ Accept = "application/json"; "X-Codex-Event" = "codex.task.completed"; "X-Codex-Payload" = $payloadType } `
+                -Headers @{ Accept = "application/json"; "X-Codex-Event" = $eventHeader; "X-Codex-Payload" = $payloadType } `
                 -UserAgent "$pluginName/0.1.0" `
                 -TimeoutSec $timeout `
                 -UseBasicParsing

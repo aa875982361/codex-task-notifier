@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Codex Stop hook that forwards the final task result to one webhook URL."""
+"""Forward Codex completion and session-activity hooks to one webhook URL."""
 
 from __future__ import annotations
 
@@ -61,13 +61,22 @@ def is_privacy_url(value: str) -> bool:
     return urlparse(value).path.rstrip("/").endswith("/private")
 
 
-def make_privacy_payload() -> dict[str, Any]:
+def make_privacy_payload(session_id: Any = None) -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
         "event": "codex.task.completed",
         "privacy_mode": True,
+        "session_id": session_id,
         "delivery_id": uuid.uuid4().hex,
         "occurred_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+    }
+
+
+def make_activity_payload(session_id: Any) -> dict[str, Any]:
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "event": "codex.session.active",
+        "session_id": session_id,
     }
 
 
@@ -98,9 +107,11 @@ def post_json(url: str, payload: Mapping[str, Any], timeout: float = 7) -> int:
             "Content-Type": "application/json; charset=utf-8",
             "Accept": "application/json",
             "User-Agent": f"{PLUGIN_NAME}/0.1.0",
-            "X-Codex-Event": "codex.task.completed",
+            "X-Codex-Event": str(payload.get("event") or "codex.task.completed"),
             "X-Codex-Payload": (
-                "privacy-minimal" if payload.get("privacy_mode") is True else "normalized"
+                "activity-minimal" if payload.get("event") == "codex.session.active"
+                else "privacy-minimal" if payload.get("privacy_mode") is True
+                else "normalized"
             ),
         },
     )
@@ -136,7 +147,10 @@ def main() -> int:
     event: Mapping[str, Any] = {}
     try:
         event = json.load(sys.stdin)
-        if event.get("hook_event_name") != "Stop" or event.get("stop_hook_active"):
+        event_name = event.get("hook_event_name")
+        if event_name not in {"Stop", "UserPromptSubmit"}:
+            return 0
+        if event_name == "Stop" and event.get("stop_hook_active"):
             return 0
 
         url = configured_url()
@@ -144,9 +158,17 @@ def main() -> int:
             log_delivery("skipped", event, "webhook URL is not configured")
             return 0
 
-        payload = make_privacy_payload() if is_privacy_url(url) else make_payload(event)
-        timeout = float(os.environ.get("CODEX_NOTIFY_TIMEOUT", "7"))
-        attempts = max(1, min(3, int(os.environ.get("CODEX_NOTIFY_ATTEMPTS", "2"))))
+        if event_name == "UserPromptSubmit":
+            if not event.get("session_id"):
+                log_delivery("skipped", event, "UserPromptSubmit did not include a session ID")
+                return 0
+            payload = make_activity_payload(event.get("session_id"))
+        else:
+            payload = make_privacy_payload(event.get("session_id")) if is_privacy_url(url) else make_payload(event)
+        default_timeout = "2" if event_name == "UserPromptSubmit" else "7"
+        default_attempts = "1" if event_name == "UserPromptSubmit" else "2"
+        timeout = float(os.environ.get("CODEX_NOTIFY_TIMEOUT", default_timeout))
+        attempts = max(1, min(3, int(os.environ.get("CODEX_NOTIFY_ATTEMPTS", default_attempts))))
         last_error: Exception | None = None
         for attempt in range(attempts):
             try:

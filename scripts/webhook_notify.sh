@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Codex Stop hook for macOS/Linux. Runtime dependencies: POSIX sh and curl.
+# Codex notification hooks for macOS/Linux. Runtime dependencies: POSIX sh and curl.
 
 plugin_name='codex-task-notifier'
 event_file=''
@@ -85,33 +85,64 @@ if ! cat > "$event_file"; then
     exit 0
 fi
 
+event_name=''
+if grep -Eq '(^|[,{[:space:]])"hook_event_name"[[:space:]]*:[[:space:]]*"UserPromptSubmit"' "$event_file"; then
+    event_name='UserPromptSubmit'
+elif grep -Eq '(^|[,{[:space:]])"hook_event_name"[[:space:]]*:[[:space:]]*"Stop"' "$event_file"; then
+    event_name='Stop'
+else
+    exit 0
+fi
+
+# Ignore recursive Stop events without transmitting the original JSON.
+if [ "$event_name" = 'Stop' ] && grep -Eq '(^|[,{[:space:]])"stop_hook_active"[[:space:]]*:[[:space:]]*true' "$event_file"; then
+    exit 0
+fi
+
+session_id=$(sed -n 's/.*[,{][[:space:]]*"session_id"[[:space:]]*:[[:space:]]*"\([A-Za-z0-9._:-]*\)".*/\1/p' "$event_file" | sed -n '1p')
+
 payload_type='hook-input'
-if [ "$privacy_mode" = true ]; then
-    # Ignore recursive Stop events without parsing or transmitting the original JSON.
-    # The key matcher cannot match an escaped copy inside last_assistant_message.
-    if grep -Eq '(^|[,{[:space:]])"stop_hook_active"[[:space:]]*:[[:space:]]*true' "$event_file"; then
+event_header='codex.task.completed'
+if [ "$event_name" = 'UserPromptSubmit' ]; then
+    if [ -z "$session_id" ]; then
+        log_delivery 'skipped' 'UserPromptSubmit did not include a valid session ID'
         exit 0
     fi
+    if ! printf '{"schema_version":"1","event":"codex.session.active","session_id":"%s"}\n' \
+        "$session_id" > "$event_file"; then
+        log_delivery 'failed' 'could not create session activity payload'
+        exit 0
+    fi
+    payload_type='activity-minimal'
+    event_header='codex.session.active'
+elif [ "$privacy_mode" = true ]; then
     occurred_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || printf '1970-01-01T00:00:00Z')
     delivery_id="$(date -u '+%s' 2>/dev/null || printf '0')-$$-${event_file##*.}"
-    if ! printf '{"schema_version":"1","event":"codex.task.completed","privacy_mode":true,"delivery_id":"%s","occurred_at":"%s"}\n' \
-        "$delivery_id" "$occurred_at" > "$event_file"; then
+    if ! printf '{"schema_version":"1","event":"codex.task.completed","privacy_mode":true,"session_id":"%s","delivery_id":"%s","occurred_at":"%s"}\n' \
+        "$session_id" "$delivery_id" "$occurred_at" > "$event_file"; then
         log_delivery 'failed' 'could not create privacy payload'
         exit 0
     fi
     payload_type='privacy-minimal'
 fi
 
-timeout=${CODEX_NOTIFY_TIMEOUT:-7}
-case "$timeout" in
-    ''|*[!0-9]*) timeout=7 ;;
-esac
-if [ "$timeout" -lt 1 ] 2>/dev/null; then timeout=7; fi
+default_timeout=7
+default_attempts=2
+if [ "$event_name" = 'UserPromptSubmit' ]; then
+    default_timeout=2
+    default_attempts=1
+fi
 
-attempts=${CODEX_NOTIFY_ATTEMPTS:-2}
+timeout=${CODEX_NOTIFY_TIMEOUT:-$default_timeout}
+case "$timeout" in
+    ''|*[!0-9]*) timeout=$default_timeout ;;
+esac
+if [ "$timeout" -lt 1 ] 2>/dev/null; then timeout=$default_timeout; fi
+
+attempts=${CODEX_NOTIFY_ATTEMPTS:-$default_attempts}
 case "$attempts" in
     1|2|3) ;;
-    *) attempts=2 ;;
+    *) attempts=$default_attempts ;;
 esac
 
 attempt=1
@@ -125,7 +156,7 @@ while [ "$attempt" -le "$attempts" ]; do
         --max-time "$timeout" \
         --header 'Content-Type: application/json; charset=utf-8' \
         --header 'Accept: application/json' \
-        --header 'X-Codex-Event: codex.task.completed' \
+        --header "X-Codex-Event: $event_header" \
         --header "X-Codex-Payload: $payload_type" \
         --user-agent "$plugin_name/0.1.0" \
         --data-binary "@$event_file" \
