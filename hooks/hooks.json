@@ -1,6 +1,19 @@
 {
   "description": "Forward completed Codex turns to the configured webhook.",
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$PLUGIN_ROOT/scripts/webhook_notify.sh\"",
+            "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"%PLUGIN_ROOT%\\scripts\\webhook_notify.ps1\"",
+            "timeout": 5,
+            "statusMessage": "Cancelling pending task notification"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
