@@ -276,10 +276,10 @@ class WebhookNotifyTests(unittest.TestCase):
 
         self.assertIn("powershell.exe", windows_command)
         self.assertIn(
-            '-File "%PLUGIN_ROOT%\\scripts\\webhook_notify.ps1"',
+            "-Command \"& (Join-Path $env:PLUGIN_ROOT 'scripts\\webhook_notify.ps1')\"",
             windows_command,
         )
-        self.assertNotIn("$env:PLUGIN_ROOT", windows_command)
+        self.assertNotIn("%PLUGIN_ROOT%", windows_command)
         self.assertNotIn("python", windows_command.lower())
         self.assertEqual(activity_handler["commandWindows"], windows_command)
         self.assertTrue((plugin_root / "scripts" / "webhook_notify.ps1").is_file())
@@ -338,6 +338,8 @@ class WebhookNotifyTests(unittest.TestCase):
         self.assertEqual(handler_group["matcher"], "^(startup|resume)$")
         self.assertIn("ensure_agent.sh", handler["command"])
         self.assertIn("ensure_agent.ps1", handler["commandWindows"])
+        self.assertIn("Join-Path $env:PLUGIN_ROOT", handler["commandWindows"])
+        self.assertNotIn("%PLUGIN_ROOT%", handler["commandWindows"])
         self.assertNotIn("start_agent", handler["command"])
         self.assertNotIn("start_agent", handler["commandWindows"])
         self.assertLessEqual(handler["timeout"], 5)

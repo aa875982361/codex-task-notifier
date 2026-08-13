@@ -8,7 +8,7 @@
           {
             "type": "command",
             "command": "sh \"$PLUGIN_ROOT/scripts/ensure_agent.sh\"",
-            "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"%PLUGIN_ROOT%\\scripts\\ensure_agent.ps1\"",
+            "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"& (Join-Path $env:PLUGIN_ROOT 'scripts\\ensure_agent.ps1')\"",
             "timeout": 5,
             "statusMessage": "Starting Codex Hook Agent"
           }
@@ -21,7 +21,7 @@
           {
             "type": "command",
             "command": "sh \"$PLUGIN_ROOT/scripts/webhook_notify.sh\"",
-            "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"%PLUGIN_ROOT%\\scripts\\webhook_notify.ps1\"",
+            "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"& (Join-Path $env:PLUGIN_ROOT 'scripts\\webhook_notify.ps1')\"",
             "timeout": 5,
             "statusMessage": "Cancelling pending task notification"
           }
@@ -34,7 +34,7 @@
           {
             "type": "command",
             "command": "sh \"$PLUGIN_ROOT/scripts/webhook_notify.sh\"",
-            "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"%PLUGIN_ROOT%\\scripts\\webhook_notify.ps1\"",
+            "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"& (Join-Path $env:PLUGIN_ROOT 'scripts\\webhook_notify.ps1')\"",
             "timeout": 20,
             "statusMessage": "Sending task notification"
           }
