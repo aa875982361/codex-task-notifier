@@ -27,9 +27,37 @@ function Invoke-AgentRequest([string] $Url, [string] $Token, $Payload) {
     }
     catch {
         $response = $_.Exception.Response
-        if ($response -and [int] $response.StatusCode -eq 403) { throw "此配置未启用远程操作" }
+        if ($response -and [int] $response.StatusCode -eq 403) {
+            $error = New-Object InvalidOperationException("此配置未启用远程操作")
+            $error.Data["RemoteControlDisabled"] = $true
+            throw $error
+        }
         throw
     }
+}
+
+function New-CodexStartInfo([string] $Arguments) {
+    $codex = Get-Command codex -All -ErrorAction Stop |
+        Where-Object { $_.CommandType -in @("Application", "ExternalScript") } |
+        Select-Object -First 1
+    if (-not $codex) { throw "未找到可执行的 Codex CLI" }
+
+    $source = [string] $codex.Source
+    $extension = [IO.Path]::GetExtension($source).ToLowerInvariant()
+    $start = New-Object Diagnostics.ProcessStartInfo
+    if ($extension -in @(".cmd", ".bat")) {
+        $start.FileName = if ([string]::IsNullOrWhiteSpace($env:ComSpec)) { "cmd.exe" } else { $env:ComSpec }
+        $start.Arguments = "/d /s /c `"`"$source`" $Arguments`""
+    }
+    elseif ($extension -eq ".ps1") {
+        $start.FileName = "powershell.exe"
+        $start.Arguments = "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$source`" $Arguments"
+    }
+    else {
+        $start.FileName = $source
+        $start.Arguments = $Arguments
+    }
+    return $start
 }
 
 function Invoke-CodexJob($Config, $Job) {
@@ -37,12 +65,9 @@ function Invoke-CodexJob($Config, $Job) {
         throw "无效的 Codex 会话 ID"
     }
     if (-not (Test-Path -LiteralPath ([string] $Job.cwd) -PathType Container)) { throw "原任务工作目录不存在" }
-    $codex = Get-Command codex -ErrorAction Stop
     $outputPath = Join-Path ([IO.Path]::GetTempPath()) ("codex-hook-agent-" + [Guid]::NewGuid().ToString("N") + ".txt")
-    $start = New-Object Diagnostics.ProcessStartInfo
-    $start.FileName = $codex.Source
     $escapedOutput = $outputPath.Replace('"', '\"')
-    $start.Arguments = "exec resume $($Job.session_id) - --output-last-message `"$escapedOutput`""
+    $start = New-CodexStartInfo "exec resume $($Job.session_id) - --output-last-message `"$escapedOutput`""
     $start.WorkingDirectory = [string] $Job.cwd
     $start.UseShellExecute = $false
     $start.RedirectStandardInput = $true
@@ -87,6 +112,10 @@ while ($true) {
         Start-Sleep -Seconds 5
     }
     catch {
+        if ($_.Exception.Data["RemoteControlDisabled"] -eq $true) {
+            Write-Warning "远程操作权限已关闭，Codex Hook Agent 已停止。"
+            break
+        }
         Write-Warning $_.Exception.Message
         Start-Sleep -Seconds 10
     }

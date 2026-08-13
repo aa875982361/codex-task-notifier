@@ -45,14 +45,18 @@ Linux 若未包含 `curl`，需要由系统包管理器安装。
 
 只有用户在小程序中明确授权远程操作后，才应手动启动 Agent。Agent 不会安装为系统服务，也不会设置开机启动；关闭终端或 PowerShell 窗口即可停止。macOS 参考 Agent 需要本机 Python 3；Windows Agent 仅使用系统 PowerShell 5.1：
 
+远程操作需要 `codex-task-notifier` 0.2.0 或更高版本。如果以前安装过通知专用旧版，必须先从本仓库 `main` 分支更新或重新安装插件。启动前应在实际插件安装目录确认 `scripts/start_agent.sh` 或 `scripts/start_agent.ps1` 存在；文件不存在代表仍在使用旧缓存，不能启动远程操作。
+
 ```bash
 # macOS
+# 先进入实际插件安装目录
 sh scripts/start_agent.sh
 ```
 
 ```powershell
 # Windows PowerShell（原生 Windows Codex，不支持 WSL2）
-powershell.exe -ExecutionPolicy Bypass -File .\scripts\start_agent.ps1
+# 先进入实际插件安装目录
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_agent.ps1
 ```
 
 Agent 复用本机已保存的 Webhook Token，只能领取属于这份配置的续跑请求。它会调用 `codex exec resume`，沿用本机 Codex 的登录、沙箱和审批设置，不会添加绕过权限参数。电脑必须保持登录、唤醒、联网，且 Agent 窗口保持运行。

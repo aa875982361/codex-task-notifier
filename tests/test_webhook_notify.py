@@ -307,6 +307,17 @@ class WebhookNotifyTests(unittest.TestCase):
 
         self.assertNotIn("[Console]::In.ReadToEnd()", powershell)
 
+    def test_windows_agent_supports_codex_wrappers_and_stops_when_disabled(self):
+        plugin_root = Path(__file__).resolve().parents[1]
+        agent = (plugin_root / "scripts" / "start_agent.ps1").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('@(".cmd", ".bat")', agent)
+        self.assertIn('$extension -eq ".ps1"', agent)
+        self.assertIn('RemoteControlDisabled', agent)
+        self.assertIn('break', agent)
+
     def test_reads_single_url_file(self):
         with TemporaryDirectory() as directory:
             path = Path(directory) / "webhook.url"
