@@ -78,18 +78,18 @@ function Invoke-CodexJob($Config, $Job) {
     $start.WorkingDirectory = [string] $Job.cwd
     $start.UseShellExecute = $false
     $start.RedirectStandardInput = $true
-    # Codex always decodes prompts from stdin as UTF-8. Without an explicit
-    # encoding, Windows uses the active system code page (for example GBK),
-    # which makes non-ASCII prompts invalid UTF-8.
-    $start.StandardInputEncoding = New-Object Text.UTF8Encoding($false)
     $start.EnvironmentVariables["CODEX_REMOTE_RESUME_REQUEST_ID"] = [string] $Job.id
     $start.EnvironmentVariables["CODEX_REMOTE_SOURCE_TASK_ID"] = [string] $Job.source_task_id
     $process = New-Object Diagnostics.Process
     $process.StartInfo = $start
     try {
         if (-not $process.Start()) { throw "Unable to start Codex CLI" }
-        $process.StandardInput.Write([string] $Job.prompt)
-        $process.StandardInput.Close()
+        # Write UTF-8 bytes directly for Windows PowerShell 5.1 compatibility.
+        # Its .NET Framework may not expose ProcessStartInfo.StandardInputEncoding.
+        $promptBytes = (New-Object Text.UTF8Encoding($false)).GetBytes([string] $Job.prompt)
+        $inputStream = $process.StandardInput.BaseStream
+        $inputStream.Write($promptBytes, 0, $promptBytes.Length)
+        $inputStream.Close()
         $process.WaitForExit()
         if ($process.ExitCode -ne 0) { throw "Codex exited with code $($process.ExitCode)" }
     }
