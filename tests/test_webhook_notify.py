@@ -309,10 +309,14 @@ class WebhookNotifyTests(unittest.TestCase):
 
     def test_windows_agent_supports_codex_wrappers_and_stops_when_disabled(self):
         plugin_root = Path(__file__).resolve().parents[1]
-        agent = (plugin_root / "scripts" / "start_agent.ps1").read_text(
-            encoding="utf-8"
-        )
+        agent_path = plugin_root / "scripts" / "start_agent.ps1"
+        agent_bytes = agent_path.read_bytes()
 
+        # Windows PowerShell 5.1 decodes BOM-less scripts with the active ANSI
+        # code page. Keeping this entry point ASCII makes -File reliable on all
+        # Windows locales and does not depend on a BOM surviving packaging.
+        self.assertTrue(agent_bytes.isascii())
+        agent = agent_bytes.decode("ascii")
         self.assertIn('@(".cmd", ".bat")', agent)
         self.assertIn('$extension -eq ".ps1"', agent)
         self.assertIn('RemoteControlDisabled', agent)

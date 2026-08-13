@@ -59,6 +59,10 @@ sh scripts/start_agent.sh
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_agent.ps1
 ```
 
+`start_agent.ps1` 特意保持为纯 ASCII，以兼容 Windows PowerShell 5.1 对无 BOM
+UTF-8 脚本按系统代码页解码的行为。无需再使用 `Get-Content -Encoding UTF8 |
+Invoke-Expression` 等绕过方式，直接使用上述 `-File` 命令即可。
+
 Agent 复用本机已保存的 Webhook Token，只能领取属于这份配置的续跑请求。它会调用 `codex exec resume`，沿用本机 Codex 的登录、沙箱和审批设置，不会添加绕过权限参数。电脑必须保持登录、唤醒、联网，且 Agent 窗口保持运行。
 
 该插件只负责本地 Hook 触发和 Webhook 投递，不保存 SMTP 配置，也不直接发送邮件。通知服务负责保存任务结果、邮箱验证和邮件订阅。

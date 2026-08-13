@@ -5,13 +5,13 @@ function Get-WebhookUrl {
     if (-not [string]::IsNullOrWhiteSpace($env:CODEX_NOTIFY_WEBHOOK_URL)) { return $env:CODEX_NOTIFY_WEBHOOK_URL.Trim() }
     $path = Join-Path ([Environment]::GetFolderPath("UserProfile")) ".codex\codex-task-notifier.url"
     if (Test-Path -LiteralPath $path -PathType Leaf) { return (Get-Content -LiteralPath $path -Raw -Encoding UTF8).Trim() }
-    throw "请先配置 codex-task-notifier Webhook URL"
+    throw "Configure the codex-task-notifier Webhook URL before starting the agent"
 }
 
 function Get-AgentConfig([string] $WebhookUrl) {
     $uri = [Uri] $WebhookUrl
     $match = [Regex]::Match($uri.AbsolutePath, "^(.*)/hooks/codex/([^/]+)(?:/private)?/?$")
-    if (-not $match.Success) { throw "Webhook URL 不包含 /hooks/codex/<token>" }
+    if (-not $match.Success) { throw "Webhook URL must contain /hooks/codex/<token>" }
     return @{
         Base = "$($uri.Scheme)://$($uri.Authority)$($match.Groups[1].Value)/agent"
         Token = $match.Groups[2].Value
@@ -28,7 +28,7 @@ function Invoke-AgentRequest([string] $Url, [string] $Token, $Payload) {
     catch {
         $response = $_.Exception.Response
         if ($response -and [int] $response.StatusCode -eq 403) {
-            $error = New-Object InvalidOperationException("此配置未启用远程操作")
+            $error = New-Object InvalidOperationException("Remote control is not enabled for this configuration")
             $error.Data["RemoteControlDisabled"] = $true
             throw $error
         }
@@ -40,7 +40,7 @@ function New-CodexStartInfo([string] $Arguments) {
     $codex = Get-Command codex -All -ErrorAction Stop |
         Where-Object { $_.CommandType -in @("Application", "ExternalScript") } |
         Select-Object -First 1
-    if (-not $codex) { throw "未找到可执行的 Codex CLI" }
+    if (-not $codex) { throw "Codex CLI executable was not found" }
 
     $source = [string] $codex.Source
     $extension = [IO.Path]::GetExtension($source).ToLowerInvariant()
@@ -62,9 +62,9 @@ function New-CodexStartInfo([string] $Arguments) {
 
 function Invoke-CodexJob($Config, $Job) {
     if ([string]::IsNullOrWhiteSpace([string] $Job.session_id) -or [string] $Job.session_id -notmatch '^[A-Za-z0-9._:-]+$') {
-        throw "无效的 Codex 会话 ID"
+        throw "Invalid Codex session ID"
     }
-    if (-not (Test-Path -LiteralPath ([string] $Job.cwd) -PathType Container)) { throw "原任务工作目录不存在" }
+    if (-not (Test-Path -LiteralPath ([string] $Job.cwd) -PathType Container)) { throw "The original task working directory does not exist" }
     $outputPath = Join-Path ([IO.Path]::GetTempPath()) ("codex-hook-agent-" + [Guid]::NewGuid().ToString("N") + ".txt")
     $escapedOutput = $outputPath.Replace('"', '\"')
     $start = New-CodexStartInfo "exec resume $($Job.session_id) - --output-last-message `"$escapedOutput`""
@@ -76,11 +76,11 @@ function Invoke-CodexJob($Config, $Job) {
     $process = New-Object Diagnostics.Process
     $process.StartInfo = $start
     try {
-        if (-not $process.Start()) { throw "无法启动 Codex CLI" }
+        if (-not $process.Start()) { throw "Unable to start Codex CLI" }
         $process.StandardInput.Write([string] $Job.prompt)
         $process.StandardInput.Close()
         $process.WaitForExit()
-        if ($process.ExitCode -ne 0) { throw "Codex 退出码：$($process.ExitCode)" }
+        if ($process.ExitCode -ne 0) { throw "Codex exited with code $($process.ExitCode)" }
     }
     finally {
         $process.Dispose()
@@ -91,7 +91,7 @@ function Invoke-CodexJob($Config, $Job) {
 $config = Get-AgentConfig (Get-WebhookUrl)
 $codexVersion = try { (& codex --version 2>&1 | Out-String).Trim() } catch { "unavailable" }
 $metadata = @{ platform = "windows"; agent_version = $agentVersion; codex_version = $codexVersion }
-Write-Host "Codex Hook Agent 已启动。关闭此窗口即可停止远程操作。"
+Write-Host "Codex Hook Agent started. Close this window to stop remote operations."
 
 while ($true) {
     try {
@@ -100,7 +100,7 @@ while ($true) {
         if ([int] $response.StatusCode -eq 200 -and -not [string]::IsNullOrWhiteSpace($response.Content)) {
             $job = ($response.Content | ConvertFrom-Json).job
             if ($job) {
-                Write-Host "正在执行请求 $($job.id)…"
+                Write-Host "Running request $($job.id)..."
                 try { Invoke-CodexJob $config $job }
                 catch {
                     Invoke-AgentRequest "$($config.Base)/jobs/$($job.id)/failed" $config.Token @{
@@ -113,7 +113,7 @@ while ($true) {
     }
     catch {
         if ($_.Exception.Data["RemoteControlDisabled"] -eq $true) {
-            Write-Warning "远程操作权限已关闭，Codex Hook Agent 已停止。"
+            Write-Warning "Remote control permission is disabled. Codex Hook Agent stopped."
             break
         }
         Write-Warning $_.Exception.Message
