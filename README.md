@@ -1,6 +1,6 @@
 # Codex Task Notifier
 
-Codex 生命周期通知插件。每个主任务回合结束时，插件监听 `Stop` 事件；用户在同一会话继续输入时，插件监听 `UserPromptSubmit` 事件并取消尚未发送的旧提醒。邮件等下游通知由服务器统一分发。
+Codex 生命周期通知插件。每个主任务回合结束时，插件监听 `Stop` 事件；用户在同一会话继续输入时，插件监听 `UserPromptSubmit` 事件并取消尚未发送的旧提醒。邮件等下游通知由服务器统一分发。一个账号可以生成多份配置，每份配置只应放在一台电脑上。
 
 ## 配置
 
@@ -38,6 +38,24 @@ Linux 若未包含 `curl`，需要由系统包管理器安装。
 - 隐私模式：Webhook 地址以 `/private` 结尾。插件在本机丢弃任务内容，只上传会话 ID、匿名投递 ID、完成时间和隐私标记。会话 ID 仅用于取消同一会话的待发送提醒。
 
 模式写入 Webhook 地址，因此切换模式后必须重新生成配置并应用到 Codex。旧 Token 会立即失效；此前已经上传的任务不受影响。
+
+## 可选远程操作
+
+新建普通模式配置时可以选择“仅任务通知”或“通知并允许远程操作 Codex”。默认仅通知，不需要安装或启动任何本地常驻程序。隐私模式固定为仅通知，因为服务端没有任务结果和工作目录，无法可靠继续任务。
+
+只有用户在小程序中明确授权远程操作后，才应手动启动 Agent。Agent 不会安装为系统服务，也不会设置开机启动；关闭终端或 PowerShell 窗口即可停止。macOS 参考 Agent 需要本机 Python 3；Windows Agent 仅使用系统 PowerShell 5.1：
+
+```bash
+# macOS
+sh scripts/start_agent.sh
+```
+
+```powershell
+# Windows PowerShell（原生 Windows Codex，不支持 WSL2）
+powershell.exe -ExecutionPolicy Bypass -File .\scripts\start_agent.ps1
+```
+
+Agent 复用本机已保存的 Webhook Token，只能领取属于这份配置的续跑请求。它会调用 `codex exec resume`，沿用本机 Codex 的登录、沙箱和审批设置，不会添加绕过权限参数。电脑必须保持登录、唤醒、联网，且 Agent 窗口保持运行。
 
 该插件只负责本地 Hook 触发和 Webhook 投递，不保存 SMTP 配置，也不直接发送邮件。通知服务负责保存任务结果、邮箱验证和邮件订阅。
 

@@ -99,21 +99,26 @@ def make_payload(event: Mapping[str, Any]) -> dict[str, Any]:
 
 def post_json(url: str, payload: Mapping[str, Any], timeout: float = 7) -> int:
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json; charset=utf-8",
+        "Accept": "application/json",
+        "User-Agent": f"{PLUGIN_NAME}/0.1.0",
+        "X-Codex-Event": str(payload.get("event") or "codex.task.completed"),
+        "X-Codex-Payload": (
+            "activity-minimal" if payload.get("event") == "codex.session.active"
+            else "privacy-minimal" if payload.get("privacy_mode") is True
+            else "normalized"
+        ),
+    }
+    if os.environ.get("CODEX_REMOTE_RESUME_REQUEST_ID", "").strip():
+        headers["X-Codex-Resume-Request-Id"] = os.environ["CODEX_REMOTE_RESUME_REQUEST_ID"].strip()
+    if os.environ.get("CODEX_REMOTE_SOURCE_TASK_ID", "").strip():
+        headers["X-Codex-Source-Task-Id"] = os.environ["CODEX_REMOTE_SOURCE_TASK_ID"].strip()
     request = Request(
         url,
         data=body,
         method="POST",
-        headers={
-            "Content-Type": "application/json; charset=utf-8",
-            "Accept": "application/json",
-            "User-Agent": f"{PLUGIN_NAME}/0.1.0",
-            "X-Codex-Event": str(payload.get("event") or "codex.task.completed"),
-            "X-Codex-Payload": (
-                "activity-minimal" if payload.get("event") == "codex.session.active"
-                else "privacy-minimal" if payload.get("privacy_mode") is True
-                else "normalized"
-            ),
-        },
+        headers=headers,
     )
     with urlopen(request, timeout=timeout) as response:
         status = int(response.status)

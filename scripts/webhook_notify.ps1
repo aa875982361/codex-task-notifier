@@ -159,12 +159,19 @@ try {
     $lastError = $null
     for ($attempt = 1; $attempt -le $attempts; $attempt++) {
         try {
+            $headers = @{ Accept = "application/json"; "X-Codex-Event" = $eventHeader; "X-Codex-Payload" = $payloadType }
+            if (-not [string]::IsNullOrWhiteSpace($env:CODEX_REMOTE_RESUME_REQUEST_ID)) {
+                $headers["X-Codex-Resume-Request-Id"] = $env:CODEX_REMOTE_RESUME_REQUEST_ID.Trim()
+            }
+            if (-not [string]::IsNullOrWhiteSpace($env:CODEX_REMOTE_SOURCE_TASK_ID)) {
+                $headers["X-Codex-Source-Task-Id"] = $env:CODEX_REMOTE_SOURCE_TASK_ID.Trim()
+            }
             $response = Invoke-WebRequest `
                 -Uri $url `
                 -Method Post `
                 -Body ([Text.Encoding]::UTF8.GetBytes($payloadText)) `
                 -ContentType "application/json; charset=utf-8" `
-                -Headers @{ Accept = "application/json"; "X-Codex-Event" = $eventHeader; "X-Codex-Payload" = $payloadType } `
+                -Headers $headers `
                 -UserAgent "$pluginName/0.1.0" `
                 -TimeoutSec $timeout `
                 -UseBasicParsing

@@ -82,6 +82,36 @@ class WebhookNotifyTests(unittest.TestCase):
         self.assertEqual(received["payload"], event)
         self.assertEqual(received["headers"]["X-Codex-Payload"], "hook-input")
 
+    def test_posix_hook_forwards_remote_resume_linkage_headers(self):
+        received = {}
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                received["resume"] = self.headers.get("X-Codex-Resume-Request-Id")
+                received["source"] = self.headers.get("X-Codex-Source-Task-Id")
+                self.rfile.read(int(self.headers["Content-Length"]))
+                self.send_response(204)
+                self.end_headers()
+
+            def log_message(self, format, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.handle_request)
+        thread.start()
+        plugin_root = Path(__file__).resolve().parents[1]
+        try:
+            subprocess.run(
+                ["sh", str(plugin_root / "scripts" / "webhook_notify.sh")],
+                input=json.dumps({"hook_event_name": "Stop", "session_id": "session"}),
+                text=True, capture_output=True, check=True,
+                env={**os.environ, "CODEX_NOTIFY_WEBHOOK_URL": f"http://127.0.0.1:{server.server_port}/notify", "CODEX_REMOTE_RESUME_REQUEST_ID": "resume-1", "CODEX_REMOTE_SOURCE_TASK_ID": "task-1"},
+            )
+        finally:
+            thread.join(timeout=2)
+            server.server_close()
+        self.assertEqual(received, {"resume": "resume-1", "source": "task-1"})
+
     def test_posix_privacy_hook_never_transmits_task_content(self):
         received = {}
 

@@ -158,6 +158,8 @@ while [ "$attempt" -le "$attempts" ]; do
         --header 'Accept: application/json' \
         --header "X-Codex-Event: $event_header" \
         --header "X-Codex-Payload: $payload_type" \
+        --header "X-Codex-Resume-Request-Id: ${CODEX_REMOTE_RESUME_REQUEST_ID:-}" \
+        --header "X-Codex-Source-Task-Id: ${CODEX_REMOTE_SOURCE_TASK_ID:-}" \
         --user-agent "$plugin_name/0.1.0" \
         --data-binary "@$event_file" \
         "$configured_url" 2>/dev/null)

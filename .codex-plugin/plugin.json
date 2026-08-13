@@ -1,6 +1,6 @@
 {
   "name": "codex-task-notifier",
-  "version": "0.1.0+codex.20260806165921",
+  "version": "0.2.0+codex.20260812083903",
   "description": "Send completed Codex task notifications with an optional privacy mode.",
   "author": {
     "name": "Codex Hook"
@@ -8,12 +8,13 @@
   "interface": {
     "displayName": "Codex Task Notifier",
     "shortDescription": "Forward task completions with optional local redaction.",
-    "longDescription": "Posts Codex completion and session-activity events to one configured webhook URL. Privacy mode keeps task content local while sending the session ID needed to cancel stale reminders.",
+    "longDescription": "Posts Codex completion and session-activity events to one machine-specific webhook URL. Normal-mode configurations can optionally run a manually started bridge for mobile follow-up tasks; privacy mode remains notification-only.",
     "developerName": "Codex Hook",
     "category": "Productivity",
     "capabilities": [
       "Task completion webhook",
-      "Same-session reminder cancellation"
+      "Same-session reminder cancellation",
+      "Optional manually started remote-resume bridge"
     ],
     "defaultPrompt": "Configure or test my Codex task notification webhook."
   }
