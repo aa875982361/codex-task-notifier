@@ -320,6 +320,10 @@ class WebhookNotifyTests(unittest.TestCase):
         agent = agent_bytes.decode("ascii")
         self.assertIn('@(".cmd", ".bat")', agent)
         self.assertIn('$extension -eq ".ps1"', agent)
+        self.assertIn(
+            '$start.StandardInputEncoding = New-Object Text.UTF8Encoding($false)',
+            agent,
+        )
         self.assertIn('RemoteControlDisabled', agent)
         self.assertIn('break', agent)
 

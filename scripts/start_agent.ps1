@@ -78,6 +78,10 @@ function Invoke-CodexJob($Config, $Job) {
     $start.WorkingDirectory = [string] $Job.cwd
     $start.UseShellExecute = $false
     $start.RedirectStandardInput = $true
+    # Codex always decodes prompts from stdin as UTF-8. Without an explicit
+    # encoding, Windows uses the active system code page (for example GBK),
+    # which makes non-ASCII prompts invalid UTF-8.
+    $start.StandardInputEncoding = New-Object Text.UTF8Encoding($false)
     $start.EnvironmentVariables["CODEX_REMOTE_RESUME_REQUEST_ID"] = [string] $Job.id
     $start.EnvironmentVariables["CODEX_REMOTE_SOURCE_TASK_ID"] = [string] $Job.source_task_id
     $process = New-Object Diagnostics.Process
