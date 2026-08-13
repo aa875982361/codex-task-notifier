@@ -1,6 +1,20 @@
 {
   "description": "Forward completed Codex turns to the configured webhook.",
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "^(startup|resume)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$PLUGIN_ROOT/scripts/ensure_agent.sh\"",
+            "commandWindows": "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"%PLUGIN_ROOT%\\scripts\\ensure_agent.ps1\"",
+            "timeout": 5,
+            "statusMessage": "Starting Codex Hook Agent"
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "hooks": [

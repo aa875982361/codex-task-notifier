@@ -14,6 +14,7 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import webhook_notify
+import codex_hook_agent
 
 
 class WebhookNotifyTests(unittest.TestCase):
@@ -321,6 +322,44 @@ class WebhookNotifyTests(unittest.TestCase):
         self.assertIn('$extension -eq ".ps1"', agent)
         self.assertIn('RemoteControlDisabled', agent)
         self.assertIn('break', agent)
+
+    def test_session_start_hook_launches_single_instance_agent(self):
+        plugin_root = Path(__file__).resolve().parents[1]
+        hooks = json.loads(
+            (plugin_root / "hooks" / "hooks.json").read_text(encoding="utf-8")
+        )
+        handler_group = hooks["hooks"]["SessionStart"][0]
+        handler = handler_group["hooks"][0]
+
+        self.assertEqual(handler_group["matcher"], "^(startup|resume)$")
+        self.assertIn("ensure_agent.sh", handler["command"])
+        self.assertIn("ensure_agent.ps1", handler["commandWindows"])
+        self.assertNotIn("start_agent", handler["command"])
+        self.assertNotIn("start_agent", handler["commandWindows"])
+        self.assertLessEqual(handler["timeout"], 5)
+
+        windows_launcher = (
+            plugin_root / "scripts" / "ensure_agent.ps1"
+        ).read_bytes()
+        self.assertTrue(windows_launcher.isascii())
+        self.assertIn(
+            "ProcessWindowStyle]::Hidden", windows_launcher.decode("ascii")
+        )
+        self.assertIn(
+            "codex-task-notifier-agent.log", windows_launcher.decode("ascii")
+        )
+
+    @unittest.skipIf(os.name == "nt", "POSIX lock implementation")
+    def test_posix_agent_allows_only_one_instance(self):
+        with TemporaryDirectory() as directory, patch.dict(
+            os.environ, {"HOME": directory}
+        ):
+            first_lock = codex_hook_agent.acquire_single_instance_lock()
+            self.assertIsNotNone(first_lock)
+            try:
+                self.assertIsNone(codex_hook_agent.acquire_single_instance_lock())
+            finally:
+                first_lock.close()
 
     def test_reads_single_url_file(self):
         with TemporaryDirectory() as directory:

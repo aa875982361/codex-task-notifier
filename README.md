@@ -43,7 +43,13 @@ Linux 若未包含 `curl`，需要由系统包管理器安装。
 
 新建普通模式配置时可以选择“仅任务通知”或“通知并允许远程操作 Codex”。默认仅通知，不需要安装或启动任何本地常驻程序。隐私模式固定为仅通知，因为服务端没有任务结果和工作目录，无法可靠继续任务。
 
-只有用户在小程序中明确授权远程操作后，才应手动启动 Agent。Agent 不会安装为系统服务，也不会设置开机启动；关闭终端或 PowerShell 窗口即可停止。macOS 参考 Agent 需要本机 Python 3；Windows Agent 仅使用系统 PowerShell 5.1：
+只有用户在小程序中明确授权远程操作后，Agent 才会成功建立连接。启用本插件后，
+Codex 在首次启动或恢复会话时会自动在后台启动 Agent，无需用户每次手动打开窗口。
+Agent 不会安装为系统服务，也不会设置开机启动；只有 Codex 启动过后才会在本次
+登录期间驻留。多个 Codex 任务共用同一个 Agent 进程。macOS 参考 Agent 需要本机
+Python 3；Windows Agent 仅使用系统 PowerShell 5.1。
+
+以下命令保留为手动排障入口：
 
 远程操作需要 `codex-task-notifier` 0.2.0 或更高版本。如果以前安装过通知专用旧版，必须先从本仓库 `main` 分支更新或重新安装插件。启动前应在实际插件安装目录确认 `scripts/start_agent.sh` 或 `scripts/start_agent.ps1` 存在；文件不存在代表仍在使用旧缓存，不能启动远程操作。
 
@@ -63,7 +69,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_agent.ps
 UTF-8 脚本按系统代码页解码的行为。无需再使用 `Get-Content -Encoding UTF8 |
 Invoke-Expression` 等绕过方式，直接使用上述 `-File` 命令即可。
 
-Agent 复用本机已保存的 Webhook Token，只能领取属于这份配置的续跑请求。它会调用 `codex exec resume`，沿用本机 Codex 的登录、沙箱和审批设置，不会添加绕过权限参数。电脑必须保持登录、唤醒、联网，且 Agent 窗口保持运行。
+Agent 复用本机已保存的 Webhook Token，只能领取属于这份配置的续跑请求。它会调用 `codex exec resume`，沿用本机 Codex 的登录、沙箱和审批设置，不会添加绕过权限参数。电脑必须保持登录、唤醒和联网。后台日志位于 `~/.codex/logs/codex-task-notifier-agent.log`。
+首次安装或插件 Hook 内容变更后，Codex 可能提示审查 Hook；用户只需在 `/hooks`
+中信任这份插件 Hook 一次。
 
 该插件只负责本地 Hook 触发和 Webhook 投递，不保存 SMTP 配置，也不直接发送邮件。通知服务负责保存任务结果、邮箱验证和邮件订阅。
 

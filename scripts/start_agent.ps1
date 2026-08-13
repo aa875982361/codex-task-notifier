@@ -1,6 +1,13 @@
 $ErrorActionPreference = "Stop"
 $agentVersion = "0.1.0"
 
+$instanceMutex = New-Object Threading.Mutex($false, "Local\CodexTaskNotifierAgent")
+$ownsMutex = $false
+try {
+    try { $ownsMutex = $instanceMutex.WaitOne(0) }
+    catch [Threading.AbandonedMutexException] { $ownsMutex = $true }
+    if (-not $ownsMutex) { exit 0 }
+
 function Get-WebhookUrl {
     if (-not [string]::IsNullOrWhiteSpace($env:CODEX_NOTIFY_WEBHOOK_URL)) { return $env:CODEX_NOTIFY_WEBHOOK_URL.Trim() }
     $path = Join-Path ([Environment]::GetFolderPath("UserProfile")) ".codex\codex-task-notifier.url"
@@ -93,30 +100,35 @@ $codexVersion = try { (& codex --version 2>&1 | Out-String).Trim() } catch { "un
 $metadata = @{ platform = "windows"; agent_version = $agentVersion; codex_version = $codexVersion }
 Write-Host "Codex Hook Agent started. Close this window to stop remote operations."
 
-while ($true) {
-    try {
-        Invoke-AgentRequest "$($config.Base)/heartbeat" $config.Token $metadata | Out-Null
-        $response = Invoke-AgentRequest "$($config.Base)/jobs/claim" $config.Token $metadata
-        if ([int] $response.StatusCode -eq 200 -and -not [string]::IsNullOrWhiteSpace($response.Content)) {
-            $job = ($response.Content | ConvertFrom-Json).job
-            if ($job) {
-                Write-Host "Running request $($job.id)..."
-                try { Invoke-CodexJob $config $job }
-                catch {
-                    Invoke-AgentRequest "$($config.Base)/jobs/$($job.id)/failed" $config.Token @{
-                        failure_code = "codex_failed"; failure_message = $_.Exception.Message
-                    } | Out-Null
+    while ($true) {
+        try {
+            Invoke-AgentRequest "$($config.Base)/heartbeat" $config.Token $metadata | Out-Null
+            $response = Invoke-AgentRequest "$($config.Base)/jobs/claim" $config.Token $metadata
+            if ([int] $response.StatusCode -eq 200 -and -not [string]::IsNullOrWhiteSpace($response.Content)) {
+                $job = ($response.Content | ConvertFrom-Json).job
+                if ($job) {
+                    Write-Host "Running request $($job.id)..."
+                    try { Invoke-CodexJob $config $job }
+                    catch {
+                        Invoke-AgentRequest "$($config.Base)/jobs/$($job.id)/failed" $config.Token @{
+                            failure_code = "codex_failed"; failure_message = $_.Exception.Message
+                        } | Out-Null
+                    }
                 }
             }
+            Start-Sleep -Seconds 5
         }
-        Start-Sleep -Seconds 5
-    }
-    catch {
-        if ($_.Exception.Data["RemoteControlDisabled"] -eq $true) {
-            Write-Warning "Remote control permission is disabled. Codex Hook Agent stopped."
-            break
+        catch {
+            if ($_.Exception.Data["RemoteControlDisabled"] -eq $true) {
+                Write-Warning "Remote control permission is disabled. Codex Hook Agent stopped."
+                break
+            }
+            Write-Warning $_.Exception.Message
+            Start-Sleep -Seconds 10
         }
-        Write-Warning $_.Exception.Message
-        Start-Sleep -Seconds 10
     }
+}
+finally {
+    if ($ownsMutex) { $instanceMutex.ReleaseMutex() }
+    $instanceMutex.Dispose()
 }

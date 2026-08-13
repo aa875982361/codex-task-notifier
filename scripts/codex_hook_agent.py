@@ -18,6 +18,25 @@ from urllib.request import Request, urlopen
 AGENT_VERSION = "0.1.0"
 
 
+def acquire_single_instance_lock():
+    """Hold a per-user process lock for the lifetime of this agent."""
+    import fcntl
+
+    lock_path = Path.home() / ".codex" / "codex-task-notifier-agent.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_file = lock_path.open("a+", encoding="ascii")
+    try:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        lock_file.close()
+        return None
+    lock_file.seek(0)
+    lock_file.truncate()
+    lock_file.write(str(os.getpid()))
+    lock_file.flush()
+    return lock_file
+
+
 def configured_url() -> str:
     value = os.environ.get("CODEX_NOTIFY_WEBHOOK_URL", "").strip()
     if value:
@@ -97,6 +116,9 @@ def execute_job(base: str, token: str, job: dict) -> None:
 
 
 def main() -> int:
+    instance_lock = acquire_single_instance_lock()
+    if instance_lock is None:
+        return 0
     try:
         webhook_url = configured_url()
         if not webhook_url:
