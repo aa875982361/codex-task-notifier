@@ -1,6 +1,28 @@
-# Codex Task Notifier
+# Codex 任务微信通知插件（Codex Task Notifier）
 
-Codex 生命周期通知插件。每个主任务回合结束时，插件监听 `Stop` 事件；用户在同一会话继续输入时，插件监听 `UserPromptSubmit` 事件并取消尚未发送的旧提醒。邮件等下游通知由服务器统一分发。一个账号可以生成多份配置，每份配置只应放在一台电脑上。
+Codex Task Notifier 是一个面向 Codex 的任务完成通知 Hook 插件。Codex 编程任务结束后，它会通过 Webhook 将结果发送到微信小程序，让你离开电脑时也能及时收到 **Codex 任务微信通知**，不必反复切回窗口查看任务是否完成。
+
+## 功能特点
+
+- **微信接收 Codex 任务通知**：任务完成后，通过微信小程序查看通知和任务结果。
+- **支持远程继续任务**：可选开启远程操作，在小程序中授权后继续本机 Codex 会话。
+- **避免过期提醒**：继续在同一会话输入时，自动取消尚未发送的上一条提醒。
+- **隐私模式**：可只上报完成状态，不发送任务内容、工作目录、模型或回合 ID。
+- **跨平台、零运行时依赖**：通知 Hook 支持 macOS、Linux 和 Windows，不依赖 Python、Node 或 `jq`。
+
+适合正在寻找 **Codex 微信通知**、**Codex 任务完成提醒**、**Codex Hook 通知** 或 **Codex 远程操作** 工具的用户。
+
+## 微信小程序
+
+微信扫码使用小程序 **code任务x助手**，生成专属 Webhook 配置并接收 Codex 任务通知：
+
+<p align="center">
+  <img src="docs/images/code-task-x-assistant-miniprogram.jpg" width="280" alt="code任务x助手小程序码 - Codex 任务微信通知">
+</p>
+
+## 工作原理
+
+每个主任务回合结束时，插件监听 `Stop` 事件；用户在同一会话继续输入时，插件监听 `UserPromptSubmit` 事件并取消尚未发送的旧提醒。邮件等下游通知由服务器统一分发。一个账号可以生成多份配置，每份配置只应放在一台电脑上。
 
 ## 配置
 
